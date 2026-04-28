@@ -1,4 +1,126 @@
-<!DOCTYPE html>
+// ═══════════════════════════════════════════════════════════════
+// 🔧 GAME ENGINE PATCH (CHARACTERS + MULTIPLAYER FIXES)
+// Paste at TOP of your file
+// ═══════════════════════════════════════════════════════════════
+
+
+// ─── CHARACTER SYSTEM ───────────────────────────────────────────
+const CHARACTERS = {
+  mario: {
+    hat: '#e52222',
+    shirt: '#e52222',
+    overalls: '#1a4fc4'
+  },
+  luigi: {
+    hat: '#22aa22',
+    shirt: '#22aa22',
+    overalls: '#1a4fc4'
+  },
+  toad: {
+    hat: '#ffffff',
+    shirt: '#4444ff',
+    overalls: '#f5f5f5'
+  }
+};
+
+let G_character = 'mario';
+
+// change character safely
+window.setCharacter = function(name){
+  if (CHARACTERS[name]) {
+    G_character = name;
+    if (typeof showPowerupMsg === 'function') {
+      showPowerupMsg("Character: " + name);
+    }
+  }
+};
+
+
+// ─── MULTIPLAYER FIXES ──────────────────────────────────────────
+
+// reduce network spam (prevents lag)
+let _mpSendTimer = 0;
+
+// SAFE override wrapper (does NOT break your original function)
+const _oldMpSendState = (typeof mpSendState !== 'undefined') ? mpSendState : null;
+
+window.mpSendState = function() {
+  if (!_oldMpSendState) return;
+  if (!G_player || mpRole === 'solo') return;
+
+  if (++_mpSendTimer % 3 !== 0) return;
+
+  const p = G_player;
+
+  try {
+    mpSend({
+      type: 'state',
+      data: {
+        x: p.x,
+        y: p.y,
+        dir: p.dir,
+        vx: p.vx,
+        power: p.power,
+        dead: p.dead,
+        onGround: p.onGround
+      }
+    });
+  } catch(e){}
+};
+
+
+// ─── FIX REMOTE PLAYER (SMOOTH INTERPOLATION) ────────────────
+window.applyRemoteState = function(p, data){
+  if (!p || !data) return;
+
+  // smooth movement (fix jitter)
+  p.x += (data.x - p.x) * 0.45;
+  p.y += (data.y - p.y) * 0.45;
+
+  p.dir = data.dir;
+  p.vx = data.vx;
+  p.power = data.power;
+  p.dead = data.dead;
+  p.onGround = data.onGround;
+};
+
+
+// ─── PATCH MESSAGE HANDLER SAFELY ─────────────────────────────
+const _oldHandleMpMessage = (typeof handleMpMessage !== 'undefined') ? handleMpMessage : null;
+
+window.handleMpMessage = function(msg){
+  if (!msg || !_oldHandleMpMessage) return;
+
+  // intercept state packets for smoothing
+  if (msg.type === 'state' && window.MP_P2) {
+    applyRemoteState(window.MP_P2, msg.data);
+    return;
+  }
+
+  _oldHandleMpMessage(msg);
+};
+
+
+// ─── FIREBALL FIX (ENSURE vy SUPPORT) ─────────────────────────
+window.fixFireballPacket = function(fb){
+  return {
+    x: fb.x,
+    y: fb.y,
+    vx: fb.vx,
+    vy: fb.vy ?? -2.5,
+    alive: true,
+    r: 7,
+    bounces: 3,
+    trail: [],
+    remote: true
+  };
+};
+
+
+// ─── OPTIONAL: CHARACTER COLORS HELPER ─────────────────────────
+window.getCharacterSkin = function(){
+  return CHARACTERS[G_character] || CHARACTERS.mario;
+};<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
